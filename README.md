@@ -1,2 +1,2 @@
-# tools
+# Tools
 Tools related to emails
