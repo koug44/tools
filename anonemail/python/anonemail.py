@@ -1,3 +1,6 @@
+#!/usr/bin/python3.3
+# coding = utf8
+
 """
 Copyright (c) 2015 "Vade Retro Technology"
 anonemail is an email anonymization script
@@ -18,9 +21,6 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 
-#!/usr/bin/python3
-# coding = utf8
- 
 import email,smtplib,re, urllib, io
 import argparse,sys,base64, quopri, random
 from bs4 import BeautifulSoup
@@ -39,12 +39,12 @@ ERRADDR = "oops@email.tld"
 SMPADDR = "sampling@email.tld"
 # Server to forward anonymized messages to
 SRVSMTP = "localhost"
-# Custom headers to anonymize ( List Id…)
+# Custom headers to anonymize ( List Id...)
 CSTMHDR = ( "X-Mailer-RecptId", )
 # Headers to decode before tokenizing ( RFC 2822 )
 CODDHDR = ( "To", "Cc", "Subject" ) 
 
-addr_rgx = re.compile("for ([^;]+);") # to clean received headers
+addr_rgx = re.compile("for ([^;]+);") # to clean received headers
 url_rgx = re.compile('http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+')
 
 def replace(text, elmts):
@@ -75,7 +75,7 @@ def tokenize_to(to):
 		elif len(t) != 0:
 			tokens.add(t)
 			
-	# For every email address, extract element of interest (name, surname, domain…)
+	# For every email address, extract element of interest (name, surname, domain...)
 	for e in emails:
 		(fulluser, todom) = e.split('@')
 		for i in USERSEP.split(fulluser, 4):
@@ -227,13 +227,13 @@ def main():
 	for d in dest:
 		elmts.update(tokenize_to(d))
 		
-		elmts = sorted( elmts, key=str.__len__, reverse = True )
+		elmts = set(sorted( elmts, key=str.__len__, reverse = True ))
 	
 	# Main part - loop on every part of the email
 	for part in msg.walk():
 		if not part.is_multipart() and part.get_content_maintype() == 'text':
 			charset = part.get_content_charset()
-		
+
 		        # If there is a charset, we decode the content
 			if charset is None:
 				payload = part.get_payload()
@@ -248,8 +248,13 @@ def main():
 			elif part.get_content_subtype() == 'html':
 				new_load = url_replace_html(new_load)
 			
+			if new_load is None:
+				new_load = ""
 			# Encoding back in the previously used encoding (if any)
-			cdc_load = encode(new_load, charset, part.get('content-transfer-encoding'))
+			if charset is None:
+				cdc_load = new_load
+			else:
+				cdc_load = encode(new_load, charset, part.get('content-transfer-encoding', charset))
 			if cdc_load == "!ERR!":
 				error(msg)
 			else:
@@ -282,7 +287,7 @@ def main():
 		del msg["DKIM-Signature"]
 		del msg["DomainKey-Signature"]
 	
-	# Concatenate the anonymized headers with anonymized body = BOUM ! anonymized email !
+	# Concatenate the anonymized headers with anonymized body = BOUM! anonymized email !
 	hdr_end = msg.as_string().find('\n\n')
 	if hdr_end == -1:
 		error(msg)
@@ -293,7 +298,7 @@ def main():
 		final = new_hdr + msg.as_string()[hdr_end:]
 
 		
-	## Force reencoding to avoid issues during sending with Python SMTP Lib
+	# Force reencoding to avoid issues during sending with Python SMTP Lib
 	if msg.get_content_charset() is not None:
 		final = final.encode(msg.get_content_charset(), errors='replace')
 	else:
