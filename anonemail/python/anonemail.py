@@ -211,7 +211,7 @@ def main():
     parser.add_argument('--err', dest='err_addr', help="Error handling address", default=ERRADDR)
     parser.add_argument('--sample', dest='smpl_addr', help="Sampling address", default=SMPADDR)
     parser.add_argument('--no-dkim', dest='no_dkim', help="Remove DKIM fields", action='store_true')
-
+    parser.add_argument('-s', '--anonymise-sender', dest="is_sender_anon", action="store_true", False)
     args = parser.parse_args()
 
     # Read email
@@ -315,6 +315,9 @@ def main():
             if charset is not None:
                 final = final.encode(charset, errors='replace')
                 break
+    # sender anonymisation part
+    if args.is_sender_anon:
+        msg["From"] = args.from_addr
 
     s = smtplib.SMTP(SRVSMTP)
 
