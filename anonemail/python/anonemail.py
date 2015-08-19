@@ -25,7 +25,7 @@ import email, smtplib, re, urllib, io
 import argparse, sys, base64, quopri, random
 from bs4 import BeautifulSoup
 from email.header import decode_header
-
+from mailoutstream import FileMailOutStream, SMTPMailOutStream
 
 # Separators for getting user "parts" as in name.surname@email.tld or name_surname@email.tld
 USERSEP = re.compile("[.\-_]")
@@ -93,11 +93,10 @@ def clean_token(t):
     return t.strip('<>" \n\t')
 
 
-def error(msg, addresses):
+def error(msg, out_streams):
     """ Forward message to the error handling email address """
-    s = smtplib.SMTP(SRVSMTP)
-    s.send_message(msg, addresses.from_addr, addresses.err_addr)
-    s.quit()
+    for stream in out_streams:
+            stream.send_error(msg)
     exit(1)
 
 
@@ -211,9 +210,25 @@ def main():
     parser.add_argument('--err', dest='err_addr', help="Error handling address", default=ERRADDR)
     parser.add_argument('--sample', dest='smpl_addr', help="Sampling address", default=SMPADDR)
     parser.add_argument('--no-dkim', dest='no_dkim', help="Remove DKIM fields", action='store_true')
-    parser.add_argument('-s', '--anonymise-sender', dest="is_sender_anon", action="store_true", False)
+    parser.add_argument('-s', '--anonymise-sender', dest="is_sender_anon", action="store_true", default=False)
+    parser.add_argument('--no-mail', dest="send_mail", action="store_false", default=True,
+                        help="Tels the program not to send anonymized mail to smtp server")
+    parser.add_argument('--to-file', dest="to_file", default=False, action="store_true",
+                        help="Send a copy of anonymized mail to a file must be used with at least --dest-dir and --error-dir")
+    parser.add_argument('--dest-dir', dest="dest_dir", default=None)
+    parser.add_argument('--error-dir', dest="error_dir", default=None)
+    parser.add_argument('--sample-dir', dest="sample_dir", default=None)
     args = parser.parse_args()
-
+    
+    out_streams = []
+    if args.send_mail:
+        out_streams.append(SMTPMailOutStream(args.from_addr, args.to_addr, args.err_addr, args.smpl_addr,
+                                             SRVSMTP, True))
+    if args.to_file:
+        out_streams.append(FileMailOutStream(args.dest_dir, args.error_dir, args.sample_dir, args.sample_dir is not None))
+    if len(out_streams) == 0:
+        print("You can't use --no-mail without --to-file")
+        exit()
     # Read email
     p = email.parser.BytesFeedParser()
     if args.stdin or args.infile is None:
@@ -226,12 +241,12 @@ def main():
 
     # Check for invalid (0 bytes) message
     if len(msg) == 0:
-        error(msg, args)
+        error(msg, out_streams)
 
     # Grab recipient from To field
     dest = get_dest(msg, args.orig_to)
     if len(dest) == 0:
-        error(msg, args)
+        error(msg, out_streams)
 
     # Get tokens from recipient
     elmts = set()
@@ -266,7 +281,7 @@ def main():
             else:
                 cdc_load = encode(new_load, charset, part.get('content-transfer-encoding', charset))
             if cdc_load == "!ERR!":
-                error(msg, args)
+                error(msg, out_streams)
             else:
                 part.set_payload(cdc_load)
 
@@ -297,38 +312,39 @@ def main():
         del msg["DKIM-Signature"]
         del msg["DomainKey-Signature"]
 
+    # sender anonymisation part
+    if args.is_sender_anon:
+        msg["From"] = args.from_addr
+
     # Concatenate the anonymized headers with anonymized body = BOUM! anonymized email !
     hdr_end = msg.as_string().find('\n\n')
     if hdr_end == -1:
-        error(msg, args)
+        error(msg, out_streams)
     else:
         hdr = msg.as_string()[:hdr_end]
         new_hdr = url_replace(hdr)
         (new_hdr, count) = replace(new_hdr, elmts)
         final = new_hdr + msg.as_string()[hdr_end:]
-
+    
     # Force reencoding to avoid issues during sending with Python SMTP Lib
     if msg.get_content_charset() is not None:
         final = final.encode(msg.get_content_charset(), errors='replace')
+        msg.set_payload(final)
     else:
         for charset in msg.get_charsets():
             if charset is not None:
                 final = final.encode(charset, errors='replace')
                 break
-    # sender anonymisation part
-    if args.is_sender_anon:
-        msg["From"] = args.from_addr
-
-    s = smtplib.SMTP(SRVSMTP)
 
     # Sampling part
     if random.randint(0, 10) == 0:
-        s.sendmail(args.from_addr, args.smpl_addr, final)
+        for stream in out_streams:
+            stream.send_sample(final)
 
     # Send final message
-    s.sendmail(args.from_addr, args.to_addr, final)
+    for stream in out_streams:
+        stream.send_success(final)
 
-    s.quit()
     exit(0)
 
 
