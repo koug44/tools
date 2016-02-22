@@ -187,7 +187,7 @@ def url_ano_params(o):
 def url_replace_html(html):
     """ Parse HMTL and extract URLs """
 
-    soup = BeautifulSoup(html)
+    soup = BeautifulSoup(html, "html.parser")
     for tag in soup.findAll('a', href=True):
         url = tag['href']
         o = urllib.parse.urlparse(url)
