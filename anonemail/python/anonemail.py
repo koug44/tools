@@ -1,4 +1,4 @@
-#!/usr/bin/python3.3
+#!/usr/bin/python3
 # coding = utf8
 
 """
@@ -205,6 +205,7 @@ def main():
     group = parser.add_mutually_exclusive_group()
     group.add_argument('-', help="Read from standard input", dest='stdin', action='store_true')
     group.add_argument('-i', '--infile', help="Read from a file (eml/plain text format)", nargs='?')
+    parser.add_argument('--server', dest='srvsmtp', help="SMTP server to use", default=SRVSMTP)
     parser.add_argument('--from', dest='from_addr', help="Sender address", default=FROMADDR)
     parser.add_argument('--to', dest='to_addr', help="Recipient address", default=FWDADDR)
     parser.add_argument('--orig-to', dest='orig_to', help="To used in SMTP transaction", nargs='*', default=None)
